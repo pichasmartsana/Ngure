@@ -136,7 +136,9 @@
 
   /* uploads a photo or video, returns its public URL */
   async function upload(file, onProgress) {
-    var isVideo = /^video\//.test(file.type);
+    var ext0 = (file.name.match(/\.([a-z0-9]+)$/i) || [, ''])[1].toLowerCase();
+    var isVideo = /^video\//.test(file.type) || /^(mp4|mov|m4v|webm|3gp|mkv)$/.test(ext0);
+    var ctype = file.type || ({ mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v', webm: 'video/webm', '3gp': 'video/3gpp', mkv: 'video/x-matroska' }[ext0]) || 'application/octet-stream';
     if (!remote) {
       if (isVideo) throw new Error('Video upload needs the Supabase connection. For now, paste a video link instead.');
       var small = await shrink(file, 1600, 0.85);
@@ -155,7 +157,7 @@
       x.setRequestHeader('apikey', KEY);
       x.setRequestHeader('Authorization', 'Bearer ' + tk);
       x.setRequestHeader('x-upsert', 'false');
-      x.setRequestHeader('Content-Type', blob.type || file.type || 'application/octet-stream');
+      x.setRequestHeader('Content-Type', blob.type || ctype);
       x.upload.onprogress = function (e) { if (onProgress && e.lengthComputable) onProgress(e.loaded / e.total); };
       x.onload = function () {
         if (x.status >= 200 && x.status < 300) return resolve();

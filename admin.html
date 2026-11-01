@@ -199,7 +199,7 @@
       T('btn1', 'First button (goes to portfolio)'), T('btn2', 'Second button (opens a message)'),
       LIST('slides', 'Photos and videos in the camera frame', 'slide', 'src', [
         S('type', 'Type', [['image', 'Photo'], ['video', 'Video']]),
-        IMG('src', 'File', { kind: function (o) { return o.type === 'video' ? 'video' : 'image'; } }),
+        IMG('src', 'Photo or video file', { typeKey: 'type', hint: 'Pick a photo or a video. The type switches by itself.', kind: function (o) { return o.type === 'video' ? 'video' : 'image'; } }),
         IMG('poster', 'Cover photo shown before the video loads (optional)', { showIf: function (o) { return o.type === 'video'; } }),
         TW('alt', 'Description for screen readers (optional)', { showIf: function (o) { return o.type !== 'video'; } })
       ], function () { return { type: 'image', src: '', poster: '', alt: '' }; }, { title: function (o) { return (o.type === 'video' ? 'Video: ' : 'Photo: ') + (o.src ? (o.src.indexOf('data:') === 0 ? 'uploaded photo' : o.src.split('/').pop().split('?')[0]) : '(empty)'); },
@@ -215,7 +215,7 @@
     { key: 'about', toggle: 'about', title: 'About', desc: 'Your introduction, your portrait and the three focus cards.', fields: [
       TW('heading', 'Heading', { hint: EMHINT }), A('text', 'About text', 8, { hint: 'Leave a blank line between paragraphs. The first paragraph is shown larger.' }),
       S('portraitType', 'Portrait is a', [['image', 'Photo'], ['video', 'Video (plays silently, on a loop)']]),
-      IMG('portrait', 'Portrait file', { kind: function (o) { return o.portraitType === 'video' ? 'video' : 'image'; } }), TW('portraitCaption', 'Caption under the portrait'),
+      IMG('portrait', 'Portrait file', { typeKey: 'portraitType', kind: function (o) { return o.portraitType === 'video' ? 'video' : 'image'; } }), TW('portraitCaption', 'Caption under the portrait'),
       LIST('focus', 'Focus cards', 'card', 'title', [T('title', 'Title'), S('link', 'Opens', LINKS), A('text', 'Text', 2, { wide: true })], function () { return { title: '', text: '', link: '#services' }; })] },
     { key: 'experience', toggle: 'experience', title: 'Experience', desc: 'Jobs and what was done in each.', fields: [
       TW('heading', 'Heading', { hint: EMHINT }), TW('intro', 'Short intro'),
@@ -231,7 +231,7 @@
       TW('heading', 'Heading', { hint: EMHINT }), TW('intro', 'Short intro'),
       LIST('items', 'Projects', 'project', 'title', [T('title', 'Title'), T('category', 'Group (e.g. Live TV, Music)'), T('kicker', 'Small line on the tile'),
         S('type', 'This project is a', [['image', 'Photo'], ['video', 'Video']]),
-        IMG('image', 'Photo or video file', { kind: function (o) { return o.type === 'video' ? 'video' : 'image'; }, hint: 'For a video: upload an MP4 (up to 50 MB) or paste a YouTube link. Long videos are best on YouTube.' }),
+        IMG('image', 'Photo or video file', { typeKey: 'type', yt: true, kind: function (o) { return o.type === 'video' ? 'video' : 'image'; }, hint: 'For a video: upload an MP4 (up to 50 MB) or paste a YouTube link. Long videos are best on YouTube.' }),
         IMG('poster', 'Cover photo for the video (optional)', { showIf: function (o) { return o.type === 'video'; } }),
         TW('alt', 'Photo description (optional)', { showIf: function (o) { return o.type !== 'video'; } }), A('desc', 'Description when opened', 4)], function () { return { title: '', category: '', kicker: '', desc: '', image: '', alt: '' }; })] },
     { key: 'services', toggle: 'services', title: 'Services', desc: 'What you offer. Clicking one fills in the booking form.', fields: [
@@ -286,7 +286,8 @@
 
   /* ---------- controls ---------- */
   function ytThumb(u) { var m = String(u || '').match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/); return m ? 'https://img.youtube.com/vi/' + m[1] + '/hqdefault.jpg' : ''; }
-  function mediaControl(f, obj, change) {
+  function mediaControl(f, obj, change, reg) {
+    var setType = function (t) { if (f.typeKey) { obj[f.typeKey] = t; if (reg && reg[f.typeKey]) reg[f.typeKey].value = t; } };
     var kind = function () { return typeof f.kind === 'function' ? f.kind(obj) : (f.kind || 'image'); };
     var prev = h('div', { class: 'prev' }), status = h('span', { class: 'st' });
     var inp = h('input', { type: 'text', placeholder: 'Paste a link, or upload a file' });
@@ -301,19 +302,24 @@
       else if (isVid) { var vd = h('video', { src: v, muted: true, playsinline: true, preload: 'metadata' }); vd.muted = true; prev.append(vd); }
       else prev.append(h('img', { src: v, alt: '' }));
     }
-    inp.addEventListener('input', function () { obj[f.k] = inp.value.trim(); var v = obj[f.k]; prev.innerHTML = ''; if (v && ytThumb(v)) prev.append(h('img', { src: ytThumb(v), alt: '' })); else if (v) prev.append(kind() === 'video' ? h('video', { src: v, preload: 'metadata', muted: true }) : h('img', { src: v, alt: '' })); else prev.append(h('span', { class: 'ph' }, 'NO FILE')); change(); });
-    var up = h('button', { type: 'button', class: 'btn sm', on: { click: function () { file.accept = kind() === 'video' ? 'video/*' : 'image/*'; file.value = ''; file.click(); } } }, 'Upload ' + (f.kind === 'video' ? 'video' : 'file'));
+    inp.addEventListener('input', function () { obj[f.k] = inp.value.trim(); var v = obj[f.k];
+      if (f.typeKey) { var nt = ((f.yt && ytThumb(v)) || /\.(mp4|webm|mov|m4v|3gp)(\?|#|$)/i.test(v)) ? 'video' : (/\.(jpe?g|png|webp|gif|avif)(\?|#|$)/i.test(v) ? 'image' : null); if (nt) setType(nt); }
+      prev.innerHTML = ''; if (v && ytThumb(v)) prev.append(h('img', { src: ytThumb(v), alt: '' })); else if (v) prev.append(kind() === 'video' ? h('video', { src: v, preload: 'metadata', muted: true }) : h('img', { src: v, alt: '' })); else prev.append(h('span', { class: 'ph' }, 'NO FILE')); change(); });
+    var up = h('button', { type: 'button', class: 'btn sm', on: { click: function () { file.accept = f.typeKey ? 'image/*,video/*' : (kind() === 'video' ? 'video/*' : 'image/*'); file.value = ''; file.click(); } } }, f.typeKey ? 'Upload photo or video' : 'Upload file');
     var clr = h('button', { type: 'button', class: 'btn sm', on: { click: function () { obj[f.k] = ''; paint(); status.textContent = ''; change(); } } }, 'Remove');
     file.addEventListener('change', async function () {
       var fl = file.files[0]; if (!fl) return;
-      var wantVideo = kind() === 'video';
-      if (wantVideo && fl.type.indexOf('video/') !== 0) { status.className = 'st bad'; status.textContent = 'Please choose a video file.'; return; }
-      if (!wantVideo && fl.type.indexOf('image/') !== 0) { status.className = 'st bad'; status.textContent = 'Please choose a photo.'; return; }
-      if (fl.size > 50 * 1024 * 1024) { status.className = 'st bad'; status.textContent = 'That file is over 50 MB. Compress it first.'; return; }
+      var ext = (fl.name.split('.').pop() || '').toLowerCase();
+      var isVid = /^video\//.test(fl.type) || /^(mp4|mov|m4v|webm|3gp|mkv)$/.test(ext);
+      var isImg = /^image\//.test(fl.type) || /^(jpe?g|png|webp|gif|heic|heif|avif)$/.test(ext);
+      var bad = function (m) { status.className = 'st bad'; status.textContent = m; };
+      if (!isVid && !isImg) return bad('Please choose a photo or a video.');
+      if (!f.typeKey && (kind() === 'video') !== isVid) return bad(kind() === 'video' ? 'Please choose a video file.' : 'Please choose a photo.');
+      if (fl.size > 50 * 1024 * 1024) return bad('This file is ' + Math.round(fl.size / 1048576) + ' MB but the limit is 50 MB. Trim it on your phone, or upload it to YouTube and paste the link (projects only).');
       status.className = 'st'; status.textContent = 'Uploading…'; up.disabled = true;
       try {
         var url = await Store.upload(fl, function (p) { status.textContent = 'Uploading ' + Math.round(p * 100) + '%'; });
-        obj[f.k] = url; paint(); status.textContent = 'Uploaded ✓'; change();
+        setType(isVid ? 'video' : 'image'); obj[f.k] = url; paint(); status.textContent = 'Uploaded ✓'; change();
       } catch (e) { status.className = 'st bad'; status.textContent = e.message; }
       up.disabled = false;
     });
@@ -347,7 +353,7 @@
     return h('div', { class: 'list' }, itemsBox, add);
   }
 
-  function control(f, obj, change) {
+  function control(f, obj, change, reg) {
     var w, lab = function (inner) { return h('label', { class: 'f f-' + f.t + (f.wide ? ' wide' : '') }, h('span', { class: 'l' }, f.l), inner, f.hint && f.t !== 'list' ? h('small', { class: 'hint' }, f.hint) : null); };
     if (f.t === 'text') { var i = h('input', { type: 'text', value: obj[f.k] == null ? '' : obj[f.k] }); i.addEventListener('input', function () { obj[f.k] = i.value; change(); }); return lab(i); }
     if (f.t === 'area') { var a = h('textarea', { rows: f.rows || 3 }); a.value = obj[f.k] == null ? '' : obj[f.k]; a.addEventListener('input', function () { obj[f.k] = a.value; change(); }); return lab(a); }
@@ -355,18 +361,18 @@
     if (f.t === 'sel') {
       var s = h('select', {}, f.opts.map(function (o) { var v = Array.isArray(o) ? o[0] : o, t = Array.isArray(o) ? o[1] : o; return h('option', { value: v }, t); }));
       s.value = obj[f.k] == null ? f.opts[0][0] : obj[f.k]; if (s.value !== (obj[f.k] == null ? f.opts[0][0] : obj[f.k])) { s.append(h('option', { value: obj[f.k] }, obj[f.k])); s.value = obj[f.k]; }
-      s.addEventListener('change', function () { obj[f.k] = s.value; change(); }); return lab(s);
+      if (reg) reg[f.k] = s; s.addEventListener('change', function () { obj[f.k] = s.value; change(); }); return lab(s);
     }
     if (f.t === 'bool') { var c = h('input', { type: 'checkbox' }); c.checked = !!obj[f.k]; c.addEventListener('change', function () { obj[f.k] = c.checked; change(); }); return h('div', { class: 'f f-bool' }, h('label', { class: 'chk' }, c, f.l)); }
-    if (f.t === 'img') return h('div', { class: 'f f-img' }, h('span', { class: 'l' }, f.l), mediaControl(f, obj, change), f.hint ? h('small', { class: 'hint' }, f.hint) : null);
+    if (f.t === 'img') return h('div', { class: 'f f-img' }, h('span', { class: 'l' }, f.l), mediaControl(f, obj, change, reg), f.hint ? h('small', { class: 'hint' }, f.hint) : null);
     if (f.t === 'list') return h('div', { class: 'f f-list' }, h('span', { class: 'l' }, f.l), f.hint ? h('small', { class: 'hint', style: 'margin:0 0 10px' }, f.hint) : null, listControl(f, obj, change));
     return h('div');
   }
   function renderFields(fields, obj, onchg) {
-    var box = h('div', { class: 'fields' }), entries = [];
+    var box = h('div', { class: 'fields' }), entries = [], reg = {};
     var upd = function () { entries.forEach(function (e) { e.w.hidden = e.f.showIf ? !e.f.showIf(obj) : false; }); };
     var change = function () { upd(); onchg(); };
-    fields.forEach(function (f) { var w = control(f, obj, change); entries.push({ w: w, f: f }); box.append(w); });
+    fields.forEach(function (f) { var w = control(f, obj, change, reg); entries.push({ w: w, f: f }); box.append(w); });
     upd(); return box;
   }
 
