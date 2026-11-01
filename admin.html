@@ -214,7 +214,8 @@
     { group: 'Sections' },
     { key: 'about', toggle: 'about', title: 'About', desc: 'Your introduction, your portrait and the three focus cards.', fields: [
       TW('heading', 'Heading', { hint: EMHINT }), A('text', 'About text', 8, { hint: 'Leave a blank line between paragraphs. The first paragraph is shown larger.' }),
-      IMG('portrait', 'Portrait photo'), TW('portraitCaption', 'Caption under the portrait'),
+      S('portraitType', 'Portrait is a', [['image', 'Photo'], ['video', 'Video (plays silently, on a loop)']]),
+      IMG('portrait', 'Portrait file', { kind: function (o) { return o.portraitType === 'video' ? 'video' : 'image'; } }), TW('portraitCaption', 'Caption under the portrait'),
       LIST('focus', 'Focus cards', 'card', 'title', [T('title', 'Title'), S('link', 'Opens', LINKS), A('text', 'Text', 2, { wide: true })], function () { return { title: '', text: '', link: '#services' }; })] },
     { key: 'experience', toggle: 'experience', title: 'Experience', desc: 'Jobs and what was done in each.', fields: [
       TW('heading', 'Heading', { hint: EMHINT }), TW('intro', 'Short intro'),
@@ -228,7 +229,11 @@
       LIST('skills', 'Skill groups', 'group', 'group', [TW('group', 'Group name'), A('tags', 'Skills (separate with commas)', 3)], function () { return { group: '', tags: '' }; })] },
     { key: 'portfolio', toggle: 'portfolio', title: 'Portfolio', desc: 'Projects shown as photo tiles. Each opens its own page with its own link. Buttons above the tiles are made from the Group names.', fields: [
       TW('heading', 'Heading', { hint: EMHINT }), TW('intro', 'Short intro'),
-      LIST('items', 'Projects', 'project', 'title', [T('title', 'Title'), T('category', 'Group (e.g. Live TV, Music)'), T('kicker', 'Small line on the tile'), IMG('image', 'Photo'), TW('alt', 'Photo description (optional)'), A('desc', 'Description when opened', 4)], function () { return { title: '', category: '', kicker: '', desc: '', image: '', alt: '' }; })] },
+      LIST('items', 'Projects', 'project', 'title', [T('title', 'Title'), T('category', 'Group (e.g. Live TV, Music)'), T('kicker', 'Small line on the tile'),
+        S('type', 'This project is a', [['image', 'Photo'], ['video', 'Video']]),
+        IMG('image', 'Photo or video file', { kind: function (o) { return o.type === 'video' ? 'video' : 'image'; }, hint: 'For a video: upload an MP4 (up to 50 MB) or paste a YouTube link. Long videos are best on YouTube.' }),
+        IMG('poster', 'Cover photo for the video (optional)', { showIf: function (o) { return o.type === 'video'; } }),
+        TW('alt', 'Photo description (optional)', { showIf: function (o) { return o.type !== 'video'; } }), A('desc', 'Description when opened', 4)], function () { return { title: '', category: '', kicker: '', desc: '', image: '', alt: '' }; })] },
     { key: 'services', toggle: 'services', title: 'Services', desc: 'What you offer. Clicking one fills in the booking form.', fields: [
       TW('heading', 'Heading', { hint: EMHINT }), TW('intro', 'Short intro'),
       LIST('items', 'Services', 'service', 'title', [TW('title', 'Name'), A('text', 'Description', 2)], function () { return { title: '', text: '' }; })] },
@@ -280,6 +285,7 @@
   }
 
   /* ---------- controls ---------- */
+  function ytThumb(u) { var m = String(u || '').match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/); return m ? 'https://img.youtube.com/vi/' + m[1] + '/hqdefault.jpg' : ''; }
   function mediaControl(f, obj, change) {
     var kind = function () { return typeof f.kind === 'function' ? f.kind(obj) : (f.kind || 'image'); };
     var prev = h('div', { class: 'prev' }), status = h('span', { class: 'st' });
@@ -290,11 +296,12 @@
       inp.value = v.indexOf('data:') === 0 ? '' : v;
       inp.placeholder = v.indexOf('data:') === 0 ? 'Uploaded photo (stored in the site)' : 'Paste a link, or upload a file';
       if (!v) return prev.append(h('span', { class: 'ph' }, 'NO FILE'));
-      var isVid = kind() === 'video' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(v);
-      if (isVid) { var vd = h('video', { src: v, muted: true, playsinline: true, preload: 'metadata' }); vd.muted = true; prev.append(vd); }
+      var yt = ytThumb(v), isVid = !yt && (kind() === 'video' || /\.(mp4|webm|mov|m4v)(\?|$)/i.test(v));
+      if (yt) prev.append(h('img', { src: yt, alt: '' }));
+      else if (isVid) { var vd = h('video', { src: v, muted: true, playsinline: true, preload: 'metadata' }); vd.muted = true; prev.append(vd); }
       else prev.append(h('img', { src: v, alt: '' }));
     }
-    inp.addEventListener('input', function () { obj[f.k] = inp.value.trim(); var v = obj[f.k]; prev.innerHTML = ''; if (v) prev.append(kind() === 'video' ? h('video', { src: v, preload: 'metadata', muted: true }) : h('img', { src: v, alt: '' })); else prev.append(h('span', { class: 'ph' }, 'NO FILE')); change(); });
+    inp.addEventListener('input', function () { obj[f.k] = inp.value.trim(); var v = obj[f.k]; prev.innerHTML = ''; if (v && ytThumb(v)) prev.append(h('img', { src: ytThumb(v), alt: '' })); else if (v) prev.append(kind() === 'video' ? h('video', { src: v, preload: 'metadata', muted: true }) : h('img', { src: v, alt: '' })); else prev.append(h('span', { class: 'ph' }, 'NO FILE')); change(); });
     var up = h('button', { type: 'button', class: 'btn sm', on: { click: function () { file.accept = kind() === 'video' ? 'video/*' : 'image/*'; file.value = ''; file.click(); } } }, 'Upload ' + (f.kind === 'video' ? 'video' : 'file'));
     var clr = h('button', { type: 'button', class: 'btn sm', on: { click: function () { obj[f.k] = ''; paint(); status.textContent = ''; change(); } } }, 'Remove');
     file.addEventListener('change', async function () {

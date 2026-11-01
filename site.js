@@ -10,6 +10,15 @@
   var lines = function (s) { return String(s || '').split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean); };
   var paras = function (s) { return String(s || '').split(/\n\s*\n/).map(function (x) { return x.trim(); }).filter(Boolean); };
   var slug = Store.slug;
+  function ytId(u) { var m = String(u || '').match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/); return m ? m[1] : ''; }
+  function mediaTag(src, type, poster, alt, o) {
+    o = o || {};
+    if (!src) return '';
+    var yt = ytId(src);
+    if (yt) return '<img src="' + esc(poster || 'https://img.youtube.com/vi/' + yt + '/hqdefault.jpg') + '" alt="' + esc(alt) + '" loading="lazy">';
+    if (type === 'video') return '<video src="' + esc(src) + '#t=0.1"' + (poster ? ' poster="' + esc(poster) + '"' : '') + ' muted loop playsinline preload="metadata" disablepictureinpicture' + (o.autoplay ? ' autoplay' : '') + '></video>';
+    return '<img src="' + esc(src) + '" alt="' + esc(alt) + '" loading="lazy" onerror="this.style.display=\'none\'">';
+  }
   var ROMAN = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii'];
   var PREVIEW = /[?&]preview=1/.test(location.search);
 
@@ -100,7 +109,7 @@
       h += '<section id="about"><div class="wrap rv">' + head('About', a.heading, '') +
         '<div class="about-grid"><div class="about-cols">' + paras(a.text).map(function (p) { return '<p>' + esc(p) + '</p>'; }).join('') +
         '<div class="btns" style="margin-top:8px"><a class="btn fill" href="#experience">See experience</a>' + (on('booking') ? '<a class="btn" href="#book">Book a session</a>' : '') + '</div></div>' +
-        (a.portrait ? '<figure class="portrait"><img src="' + esc(a.portrait) + '" alt="Portrait of ' + esc(C.site.name) + '" loading="lazy" onerror="this.style.display=\'none\'"><figcaption>' + esc(a.portraitCaption) + '</figcaption></figure>' : '') + '</div>' +
+        (a.portrait ? '<figure class="portrait">' + mediaTag(a.portrait, a.portraitType, '', 'Portrait of ' + C.site.name, { autoplay: true }) + '<figcaption>' + esc(a.portraitCaption) + '</figcaption></figure>' : '') + '</div>' +
         '<div class="focus">' + (a.focus || []).map(function (f, i) { return '<a href="' + esc(f.link || '#about') + '"><span class="go">↗</span><span class="n">' + (ROMAN[i] || (i + 1)) + '.</span><h3>' + esc(f.title) + '</h3><p>' + esc(f.text) + '</p></a>'; }).join('') + '</div></div></section>';
     }
 
@@ -138,8 +147,8 @@
       h += '<section id="portfolio" style="padding-top:0"><div class="wrap rv">' + head('Portfolio', po.heading, po.intro) +
         (cats.length > 1 ? '<div class="filters"><button class="on" data-f="all">All</button>' + cats.map(function (c) { return '<button data-f="' + esc(slug(c)) + '">' + esc(c) + '</button>'; }).join('') + '</div>' : '') +
         '<div class="work">' + items.map(function (x) {
-          return '<a href="#/work/' + esc(x.id) + '" class="tile" role="button" data-c="' + esc(slug(x.category)) + '" data-id="' + esc(x.id) + '" data-title="' + attr(x.title) + '" data-cat="' + attr(x.kicker) + '" data-desc="' + attr(x.desc) + '">' +
-            (x.image ? '<img src="' + esc(x.image) + '" alt="' + esc(x.alt || x.title) + '" loading="lazy">' : '') + '<span class="ov"></span><span class="play">▶</span><span class="tx"><small>' + esc(x.kicker) + '</small><h3>' + esc(x.title) + '</h3></span></a>';
+          return '<a href="#/work/' + esc(x.id) + '" class="tile" role="button" data-c="' + esc(slug(x.category)) + '" data-id="' + esc(x.id) + '" data-title="' + attr(x.title) + '" data-cat="' + attr(x.kicker) + '" data-desc="' + attr(x.desc) + '" data-type="' + esc(x.type || 'image') + '" data-src="' + esc(x.image || '') + '" data-poster="' + esc(x.poster || '') + '">' +
+            mediaTag(x.image, x.type, x.poster, x.alt || x.title) + '<span class="ov"></span><span class="play">▶</span><span class="tx"><small>' + esc(x.kicker) + '</small><h3>' + esc(x.title) + '</h3></span></a>';
         }).join('') + '</div></div></section>';
     }
 
@@ -277,7 +286,7 @@
     /* modal */
     var modal = $('#modal'), sheet = $('#sheet'), mBody = $('#mBody');
     function openModal(html, wide) { mBody.innerHTML = html; sheet.classList.toggle('wide', !!wide); modal.classList.add('open'); document.body.style.overflow = 'hidden'; sheet.scrollTop = 0; }
-    function closeModalRaw() { modal.classList.remove('open'); document.body.style.overflow = ''; }
+    function closeModalRaw() { mBody.querySelectorAll('video').forEach(function (v) { v.pause(); }); mBody.innerHTML = ''; modal.classList.remove('open'); document.body.style.overflow = ''; }
     function closeModal() {
       closeModalRaw();
       if (routeOpen) { routeOpen = false; var m = location.hash.match(/^#\/([a-z]+)\//); history.replaceState(null, '', '#' + (SECTION[m && m[1]] || 'top')); document.title = BASE_TITLE; }
@@ -333,8 +342,11 @@
       });
     });
     function showTile(t) {
-      var title = t.dataset.title, im = t.querySelector('img');
-      openModal((im ? '<img class="cover" src="' + esc(im.src) + '" alt="' + esc(title) + '">' : '') +
+      var title = t.dataset.title, src = t.dataset.src, yt = ytId(src), media = '';
+      if (yt) media = '<div class="cover vid"><iframe src="https://www.youtube-nocookie.com/embed/' + yt + '?autoplay=1&rel=0" title="' + esc(title) + '" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>';
+      else if (t.dataset.type === 'video' && src) media = '<video class="cover" src="' + esc(src) + '" controls autoplay playsinline' + (t.dataset.poster ? ' poster="' + esc(t.dataset.poster) + '"' : '') + '></video>';
+      else if (src) media = '<img class="cover" src="' + esc(src) + '" alt="' + esc(title) + '">';
+      openModal(media +
         '<div class="pad"><div class="k">' + esc(t.dataset.cat) + '</div><h3>' + esc(title) + '</h3><p>' + esc(t.dataset.desc) + '</p>' +
         '<div class="acts"><button class="btn fill" id="askWork">Ask about this work</button>' + (C.sections.booking !== false ? '<button class="btn" id="hireWork">Work with ' + esc(N) + '</button>' : '') + '</div>' + shareHTML() + '</div>', true);
       $('#askWork').addEventListener('click', function () { openMail('Question about: ' + title, 'Hi ' + N + ',\n\nI saw "' + title + '" in your portfolio and would like to know more about it.\n\nThanks,'); });
@@ -345,6 +357,16 @@
       t.addEventListener('click', function (e) { e.preventDefault(); go('work/' + t.dataset.id); });
       t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go('work/' + t.dataset.id); } });
     });
+
+    /* videos in tiles / portrait play (muted) only while on screen */
+    var vids = $$('.tile video, .portrait video');
+    if (vids.length) {
+      var still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var vio = new IntersectionObserver(function (es) {
+        es.forEach(function (e) { var v = e.target; if (e.isIntersecting && !still) { v.muted = true; v.play().catch(function () {}); } else v.pause(); });
+      }, { threshold: 0.35 });
+      vids.forEach(function (v) { v.muted = true; vio.observe(v); });
+    }
 
     /* on-air segments */
     var SEGS = {}; ids(C.onair.items).forEach(function (s) { SEGS[s.id] = s; });
